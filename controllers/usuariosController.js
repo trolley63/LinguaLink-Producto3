@@ -1,3 +1,4 @@
+
 const crypto = require('node:crypto');
 
 const {
@@ -51,6 +52,25 @@ function generarCredenciales(password) {
  */
 function obtenerUsuarios(req, res) {
     res.status(200).json(usuarios.map(obtenerDatosPublicos));
+}
+
+/**
+ * Consulta un usuari pel correu electrònic.
+ * @param {string} email
+ * @returns {Object|null}
+ */
+function obtenerUsuarioPorEmail(email) {
+    const correo = String(email ?? '').trim().toLowerCase();
+
+    if (!correo) {
+        throw new Error('Debes indicar un correo electrónico.');
+    }
+
+    const usuario = usuarios.find(
+        item => item.email === correo
+    );
+
+    return usuario ? obtenerDatosPublicos(usuario) : null;
 }
 
 /**
@@ -228,6 +248,7 @@ function eliminarUsuario(req, res) {
 
 module.exports = {
     obtenerUsuarios,
+    obtenerUsuarioPorEmail,
     crearUsuario,
     actualizarUsuario,
     eliminarUsuario

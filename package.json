@@ -19,6 +19,8 @@
   },
   "homepage": "https://github.com/mprunera/LinguaLink-Producto3#readme",
   "dependencies": {
-    "express": "^5.3.0"
+    "express": "^5.3.0",
+    "graphql": "^17.1.0",
+    "graphql-http": "^1.23.1"
   }
 }
