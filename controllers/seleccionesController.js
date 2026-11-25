@@ -1,4 +1,3 @@
-
 const {
     usuarios,
     intercambios,
@@ -8,9 +7,18 @@ const {
 /**
  * Guarda o actualitza la selecció d'un usuari.
  * Comprova que existeixin l'usuari i l'intercanvi.
- * @param {import('express').Request} req
- * @param {import('express').Response} res
- * @returns {void}
+ * Si la selecció ja existeix, n'actualitza la data.
+ *
+ * @param {import('express').Request} req Petició HTTP d'Express.
+ * @param {string} req.params.idUsuario Identificador de l'usuari.
+ * @param {string} req.params.idIntercambio Identificador de l'intercanvi.
+ * @param {import('express').Response} res Resposta HTTP d'Express.
+ * @returns {import('express').Response} Resposta HTTP amb les dades de la selecció o l'error corresponent.
+ * @remarks
+ * Retorna HTTP 200 si la selecció s'ha guardat o actualitzat,
+ * HTTP 400 si algun identificador no és vàlid i HTTP 404
+ * si no existeix l'usuari o l'intercanvi indicat.
+ * La selecció conté idUsuario, idIntercambio i fechaSeleccion.
  */
 function guardarSeleccion(req, res) {
     const idUsuario = Number(req.params.idUsuario);
@@ -69,9 +77,15 @@ function guardarSeleccion(req, res) {
 
 /**
  * Consulta les seleccions d'un usuari amb les dades dels intercanvis.
- * @param {import('express').Request} req
- * @param {import('express').Response} res
- * @returns {void}
+ *
+ * @param {import('express').Request} req Petició HTTP d'Express.
+ * @param {string} req.params.idUsuario Identificador de l'usuari.
+ * @param {import('express').Response} res Resposta HTTP d'Express.
+ * @returns {import('express').Response} Resposta HTTP amb la llista d'intercanvis seleccionats o l'error corresponent.
+ * @remarks
+ * Retorna HTTP 200 amb una llista d'intercanvis que incorpora
+ * la data de selecció (fechaSeleccion), o HTTP 400 si
+ * l'identificador de l'usuari no és vàlid.
  */
 function obtenerSeleccionados(req, res) {
     const idUsuario = Number(req.params.idUsuario);
@@ -108,9 +122,16 @@ function obtenerSeleccionados(req, res) {
 
 /**
  * Elimina una selecció concreta d'un usuari.
- * @param {import('express').Request} req
- * @param {import('express').Response} res
- * @returns {void}
+ *
+ * @param {import('express').Request} req Petició HTTP d'Express.
+ * @param {string} req.params.idUsuario Identificador de l'usuari.
+ * @param {string} req.params.idIntercambio Identificador de l'intercanvi.
+ * @param {import('express').Response} res Resposta HTTP d'Express.
+ * @returns {import('express').Response} Resposta HTTP amb el resultat de l'eliminació o l'error corresponent.
+ * @remarks
+ * Retorna HTTP 200 amb el valor true si la selecció s'ha eliminat,
+ * HTTP 400 si algun identificador no és vàlid i HTTP 404
+ * si la selecció indicada no existeix.
  */
 function eliminarSeleccion(req, res) {
     const idUsuario = Number(req.params.idUsuario);

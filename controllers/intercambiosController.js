@@ -13,8 +13,16 @@ const tiposPermitidos = [
 
 /**
  * Comprova les dades d'un intercanvi.
- * @param {Object} datos
- * @returns {Object}
+ *
+ * @param {Object} [datos] Dades de l'intercanvi que es vol validar.
+ * @param {string} [datos.titulo] Títol de l'intercanvi.
+ * @param {string} [datos.descripcion] Descripció de l'intercanvi.
+ * @param {string} [datos.fecha] Data de l'intercanvi.
+ * @param {string} [datos.tipo] Tipus d'intercanvi.
+ * @param {number|string} [datos.idUsuario] Identificador de l'usuari propietari.
+ * @returns {{error: string, estado: number}|{datos: {titulo: string, descripcion: string, fecha: string, tipo: string, idUsuario: number}}}
+ * Retorna l'error i el codi HTTP si les dades no són vàlides,
+ * o les dades normalitzades si la validació és correcta.
  */
 function validarDatosIntercambio(datos) {
     datos = datos ?? {};
@@ -66,8 +74,10 @@ function validarDatosIntercambio(datos) {
 
 /**
  * Consulta tots els intercanvis.
- * @param {Object} req
- * @param {Object} res
+ *
+ * @param {import('express').Request} req Petició HTTP d'Express.
+ * @param {import('express').Response} res Resposta HTTP d'Express.
+ * @returns {void} Envia una resposta HTTP 200 amb la llista d'intercanvis.
  */
 function obtenerIntercambios(req, res) {
     res.status(200).json(intercambios);
@@ -75,8 +85,14 @@ function obtenerIntercambios(req, res) {
 
 /**
  * Consulta els intercanvis d'un usuari.
- * @param {Object} req
- * @param {Object} res
+ *
+ * @param {import('express').Request} req Petició HTTP d'Express.
+ * @param {string} req.params.idUsuario Identificador de l'usuari.
+ * @param {import('express').Response} res Resposta HTTP d'Express.
+ * @returns {import('express').Response} Resposta HTTP amb els intercanvis de l'usuari o l'error corresponent.
+ * @remarks
+ * Retorna HTTP 200 si la consulta és correcta
+ * i HTTP 400 si l'identificador de l'usuari no és vàlid.
  */
 function obtenerIntercambiosPorUsuario(req, res) {
     const idUsuario = Number(req.params.idUsuario);
@@ -96,8 +112,14 @@ function obtenerIntercambiosPorUsuario(req, res) {
 
 /**
  * Consulta un intercanvi pel seu identificador.
- * @param {Object} req
- * @param {Object} res
+ *
+ * @param {import('express').Request} req Petició HTTP d'Express.
+ * @param {string} req.params.id Identificador de l'intercanvi.
+ * @param {import('express').Response} res Resposta HTTP d'Express.
+ * @returns {import('express').Response} Resposta HTTP amb l'intercanvi trobat o l'error corresponent.
+ * @remarks
+ * Retorna HTTP 200 si l'intercanvi existeix,
+ * HTTP 400 si l'identificador no és vàlid i HTTP 404 si no es troba.
  */
 function obtenerIntercambioPorId(req, res) {
     const id = Number(req.params.id);
@@ -123,8 +145,19 @@ function obtenerIntercambioPorId(req, res) {
 
 /**
  * Crea un intercanvi nou.
- * @param {Object} req
- * @param {Object} res
+ *
+ * @param {import('express').Request} req Petició HTTP d'Express.
+ * @param {string} req.body.titulo Títol de l'intercanvi.
+ * @param {string} req.body.descripcion Descripció de l'intercanvi.
+ * @param {string} req.body.fecha Data de l'intercanvi.
+ * @param {string} req.body.tipo Tipus d'intercanvi.
+ * @param {number|string} req.body.idUsuario Identificador de l'usuari propietari.
+ * @param {import('express').Response} res Resposta HTTP d'Express.
+ * @returns {import('express').Response} Resposta HTTP amb l'intercanvi creat o l'error corresponent.
+ * @remarks
+ * Retorna HTTP 201 si l'intercanvi s'ha creat correctament,
+ * HTTP 400 si les dades no són vàlides i HTTP 404 si l'usuari associat no existeix.
+ * El correu electrònic s'obté a partir de l'usuari associat.
  */
 function crearIntercambio(req, res) {
     const validacion = validarDatosIntercambio(req.body);
@@ -158,8 +191,21 @@ function crearIntercambio(req, res) {
 
 /**
  * Actualitza les dades d'un intercanvi.
- * @param {Object} req
- * @param {Object} res
+ *
+ * @param {import('express').Request} req Petició HTTP d'Express.
+ * @param {string} req.params.id Identificador de l'intercanvi que es vol actualitzar.
+ * @param {string} req.body.titulo Nou títol de l'intercanvi.
+ * @param {string} req.body.descripcion Nova descripció de l'intercanvi.
+ * @param {string} req.body.fecha Nova data de l'intercanvi.
+ * @param {string} req.body.tipo Nou tipus d'intercanvi.
+ * @param {number|string} req.body.idUsuario Identificador de l'usuari propietari.
+ * @param {import('express').Response} res Resposta HTTP d'Express.
+ * @returns {import('express').Response} Resposta HTTP amb l'intercanvi actualitzat o l'error corresponent.
+ * @remarks
+ * Retorna HTTP 200 si l'actualització és correcta,
+ * HTTP 400 si l'identificador o les dades no són vàlids,
+ * i HTTP 404 si no existeix l'intercanvi o l'usuari associat.
+ * El correu electrònic s'obté a partir de l'usuari associat.
  */
 function actualizarIntercambio(req, res) {
     const id = Number(req.params.id);
@@ -208,8 +254,15 @@ function actualizarIntercambio(req, res) {
 
 /**
  * Elimina un intercanvi i les seleccions relacionades.
- * @param {Object} req
- * @param {Object} res
+ *
+ * @param {import('express').Request} req Petició HTTP d'Express.
+ * @param {string} req.params.id Identificador de l'intercanvi que es vol eliminar.
+ * @param {import('express').Response} res Resposta HTTP d'Express.
+ * @returns {import('express').Response} Resposta HTTP amb el resultat de l'eliminació o l'error corresponent.
+ * @remarks
+ * Retorna HTTP 200 si l'eliminació és correcta,
+ * HTTP 400 si l'identificador no és vàlid i HTTP 404 si l'intercanvi no existeix.
+ * També elimina les seleccions associades a l'intercanvi.
  */
 function eliminarIntercambio(req, res) {
     const id = Number(req.params.id);

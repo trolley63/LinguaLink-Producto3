@@ -1,4 +1,3 @@
-
 const crypto = require('node:crypto');
 
 const {
@@ -12,8 +11,11 @@ let siguienteIdUsuario = 1;
 /**
  * Retorna les dades públiques d'un usuari.
  * No inclou el hash ni el salt de la contrasenya.
- * @param {Object} usuari
- * @returns {Object}
+ *
+ * @param {{id: number, nombre: string, email: string}} usuari
+ * Usuari del qual es volen obtenir les dades públiques.
+ * @returns {{id: number, nombre: string, email: string}}
+ * Objecte amb l'identificador, el nom i el correu electrònic.
  */
 function obtenerDatosPublicos(usuari) {
     return {
@@ -24,9 +26,12 @@ function obtenerDatosPublicos(usuari) {
 }
 
 /**
- * Genera les credencials protegides d'un usuari.
- * @param {string} password
- * @returns {Object}
+ * Genera les credencials protegides d'un usuari mitjançant PBKDF2.
+ *
+ * @param {string} password Contrasenya original de l'usuari.
+ * @returns {{passwordHash: string, passwordSalt: string}}
+ * Hash i salt de la contrasenya, codificats en Base64.
+ * @throws {Error} Si es produeix un error durant la generació de les credencials.
  */
 function generarCredenciales(password) {
     const salt = crypto.randomBytes(16);
@@ -46,9 +51,11 @@ function generarCredenciales(password) {
 }
 
 /**
- * Consulta tots els usuaris.
- * @param {Object} req
- * @param {Object} res
+ * Consulta tots els usuaris registrats.
+ *
+ * @param {import('express').Request} req Petició HTTP d'Express.
+ * @param {import('express').Response} res Resposta HTTP d'Express.
+ * @returns {void} Envia una resposta HTTP 200 amb les dades públiques dels usuaris.
  */
 function obtenerUsuarios(req, res) {
     res.status(200).json(usuarios.map(obtenerDatosPublicos));
@@ -56,8 +63,11 @@ function obtenerUsuarios(req, res) {
 
 /**
  * Consulta un usuari pel correu electrònic.
- * @param {string} email
- * @returns {Object|null}
+ *
+ * @param {string} email Correu electrònic que es vol consultar.
+ * @returns {{id: number, nombre: string, email: string}|null}
+ * Dades públiques de l'usuari o null si no existeix.
+ * @throws {Error} Si no s'indica un correu electrònic.
  */
 function obtenerUsuarioPorEmail(email) {
     const correo = String(email ?? '').trim().toLowerCase();
@@ -75,8 +85,16 @@ function obtenerUsuarioPorEmail(email) {
 
 /**
  * Crea un usuari nou.
- * @param {Object} req
- * @param {Object} res
+ *
+ * @param {import('express').Request} req Petició HTTP d'Express.
+ * @param {string} req.body.nombre Nom de l'usuari.
+ * @param {string} req.body.email Correu electrònic de l'usuari.
+ * @param {string} req.body.password Contrasenya de l'usuari.
+ * @param {import('express').Response} res Resposta HTTP d'Express.
+ * @returns {import('express').Response} Resposta HTTP amb les dades públiques de l'usuari creat o l'error corresponent.
+ * @remarks
+ * Retorna HTTP 201 si l'usuari s'ha creat correctament,
+ * HTTP 400 si les dades no són vàlides i HTTP 409 si el correu ja existeix.
  */
 function crearUsuario(req, res) {
     const nombre = String(req.body.nombre ?? '').trim();
@@ -128,8 +146,18 @@ function crearUsuario(req, res) {
 /**
  * Actualitza les dades d'un usuari.
  * La contrasenya només es modifica si se'n proporciona una de nova.
- * @param {Object} req
- * @param {Object} res
+ *
+ * @param {import('express').Request} req Petició HTTP d'Express.
+ * @param {string} req.params.id Identificador de l'usuari que es vol actualitzar.
+ * @param {string} req.body.nombre Nou nom de l'usuari.
+ * @param {string} req.body.email Nou correu electrònic de l'usuari.
+ * @param {string} [req.body.password] Nova contrasenya opcional.
+ * @param {import('express').Response} res Resposta HTTP d'Express.
+ * @returns {import('express').Response} Resposta HTTP amb les dades públiques actualitzades o l'error corresponent.
+ * @remarks
+ * Retorna HTTP 200 si l'actualització és correcta,
+ * HTTP 400 si les dades no són vàlides,
+ * HTTP 404 si l'usuari no existeix i HTTP 409 si el correu ja està utilitzat.
  */
 function actualizarUsuario(req, res) {
     const id = Number(req.params.id);
@@ -194,8 +222,16 @@ function actualizarUsuario(req, res) {
 
 /**
  * Elimina un usuari, els seus intercanvis i les seleccions relacionades.
- * @param {Object} req
- * @param {Object} res
+ *
+ * @param {import('express').Request} req Petició HTTP d'Express.
+ * @param {string} req.params.id Identificador de l'usuari que es vol eliminar.
+ * @param {import('express').Response} res Resposta HTTP d'Express.
+ * @returns {import('express').Response} Resposta HTTP amb el resultat de l'eliminació o l'error corresponent.
+ * @remarks
+ * Retorna HTTP 200 si l'eliminació és correcta,
+ * HTTP 400 si l'identificador no és vàlid i HTTP 404 si l'usuari no existeix.
+ * També elimina els intercanvis de l'usuari i les seleccions relacionades
+ * amb l'usuari o amb els seus intercanvis.
  */
 function eliminarUsuario(req, res) {
     const id = Number(req.params.id);
