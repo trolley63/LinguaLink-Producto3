@@ -1,12 +1,7 @@
 const crypto = require('node:crypto');
 
-const {
-    usuarios,
-    intercambios,
-    selecciones
-} = require('../data/almacenamiento');
-
-let siguienteIdUsuario = 1;
+const { conectarMongoDB } = require('../data/conexionMongoDB');
+const { obtenerSiguienteId } = require('../data/models/modelosMongoDB');
 
 /**
  * Retorna les dades públiques d'un usuari.
@@ -51,52 +46,60 @@ function generarCredenciales(password) {
 }
 
 /**
- * Consulta tots els usuaris registrats.
+ * Consulta tots els usuaris registrats a MongoDB.
  *
  * @param {import('express').Request} req Petició HTTP d'Express.
  * @param {import('express').Response} res Resposta HTTP d'Express.
- * @returns {void} Envia una resposta HTTP 200 amb les dades públiques dels usuaris.
+ * @returns {Promise<void>} Envia una resposta HTTP 200 amb les dades públiques dels usuaris.
  */
-function obtenerUsuarios(req, res) {
-    res.status(200).json(usuarios.map(obtenerDatosPublicos));
+async function obtenerUsuarios(req, res) {
+    const db = await conectarMongoDB();
+
+    const usuarios = await db.collection('usuarios')
+        .find({})
+        .toArray();
+
+    return res.status(200).json(usuarios.map(obtenerDatosPublicos));
 }
 
 /**
  * Consulta un usuari pel correu electrònic.
  *
  * @param {string} email Correu electrònic que es vol consultar.
- * @returns {{id: number, nombre: string, email: string}|null}
+ * @returns {Promise<{id: number, nombre: string, email: string}|null>}
  * Dades públiques de l'usuari o null si no existeix.
- * @throws {Error} Si no s'indica un correu electrònic.
+ * @throws {Error} Si no s'indica un correu electrònic o falla la consulta.
  */
-function obtenerUsuarioPorEmail(email) {
+async function obtenerUsuarioPorEmail(email) {
     const correo = String(email ?? '').trim().toLowerCase();
 
     if (!correo) {
         throw new Error('Debes indicar un correo electrónico.');
     }
 
-    const usuario = usuarios.find(
-        item => item.email === correo
-    );
+    const db = await conectarMongoDB();
+
+    const usuario = await db.collection('usuarios').findOne({
+        email: correo
+    });
 
     return usuario ? obtenerDatosPublicos(usuario) : null;
 }
 
 /**
- * Crea un usuari nou.
+ * Crea un usuari nou a MongoDB.
  *
  * @param {import('express').Request} req Petició HTTP d'Express.
  * @param {string} req.body.nombre Nom de l'usuari.
  * @param {string} req.body.email Correu electrònic de l'usuari.
  * @param {string} req.body.password Contrasenya de l'usuari.
  * @param {import('express').Response} res Resposta HTTP d'Express.
- * @returns {import('express').Response} Resposta HTTP amb les dades públiques de l'usuari creat o l'error corresponent.
+ * @returns {Promise<import('express').Response>} Resposta HTTP amb les dades públiques de l'usuari creat o l'error corresponent.
  * @remarks
  * Retorna HTTP 201 si l'usuari s'ha creat correctament,
  * HTTP 400 si les dades no són vàlides i HTTP 409 si el correu ja existeix.
  */
-function crearUsuario(req, res) {
+async function crearUsuario(req, res) {
     const nombre = String(req.body.nombre ?? '').trim();
     const email = String(req.body.email ?? '').trim().toLowerCase();
     const password = String(req.body.password ?? '');
@@ -121,9 +124,10 @@ function crearUsuario(req, res) {
         });
     }
 
-    const emailExistente = usuarios.some(
-        usuario => usuario.email === email
-    );
+    const db = await conectarMongoDB();
+    const coleccionUsuarios = db.collection('usuarios');
+
+    const emailExistente = await coleccionUsuarios.findOne({ email });
 
     if (emailExistente) {
         return res.status(409).json({
@@ -132,19 +136,29 @@ function crearUsuario(req, res) {
     }
 
     const usuario = {
-        id: siguienteIdUsuario++,
+        id: await obtenerSiguienteId(db, 'usuarios'),
         nombre,
         email,
         ...generarCredenciales(password)
     };
 
-    usuarios.push(usuario);
+    try {
+        await coleccionUsuarios.insertOne(usuario);
+    } catch (error) {
+        if (error.code === 11000 && error.keyPattern?.email) {
+            return res.status(409).json({
+                error: 'Ya existe un usuario con ese correo electrónico.'
+            });
+        }
+
+        throw error;
+    }
 
     return res.status(201).json(obtenerDatosPublicos(usuario));
 }
 
 /**
- * Actualitza les dades d'un usuari.
+ * Actualitza les dades d'un usuari a MongoDB.
  * La contrasenya només es modifica si se'n proporciona una de nova.
  *
  * @param {import('express').Request} req Petició HTTP d'Express.
@@ -153,13 +167,13 @@ function crearUsuario(req, res) {
  * @param {string} req.body.email Nou correu electrònic de l'usuari.
  * @param {string} [req.body.password] Nova contrasenya opcional.
  * @param {import('express').Response} res Resposta HTTP d'Express.
- * @returns {import('express').Response} Resposta HTTP amb les dades públiques actualitzades o l'error corresponent.
+ * @returns {Promise<import('express').Response>} Resposta HTTP amb les dades públiques actualitzades o l'error corresponent.
  * @remarks
  * Retorna HTTP 200 si l'actualització és correcta,
  * HTTP 400 si les dades no són vàlides,
  * HTTP 404 si l'usuari no existeix i HTTP 409 si el correu ja està utilitzat.
  */
-function actualizarUsuario(req, res) {
+async function actualizarUsuario(req, res) {
     const id = Number(req.params.id);
 
     if (!Number.isInteger(id) || id <= 0) {
@@ -168,7 +182,10 @@ function actualizarUsuario(req, res) {
         });
     }
 
-    const usuario = usuarios.find(item => item.id === id);
+    const db = await conectarMongoDB();
+    const coleccionUsuarios = db.collection('usuarios');
+
+    const usuario = await coleccionUsuarios.findOne({ id });
 
     if (!usuario) {
         return res.status(404).json({
@@ -200,9 +217,10 @@ function actualizarUsuario(req, res) {
         });
     }
 
-    const emailExistente = usuarios.some(
-        item => item.email === email && item.id !== id
-    );
+    const emailExistente = await coleccionUsuarios.findOne({
+        email,
+        id: { $ne: id }
+    });
 
     if (emailExistente) {
         return res.status(409).json({
@@ -210,30 +228,58 @@ function actualizarUsuario(req, res) {
         });
     }
 
-    usuario.nombre = nombre;
-    usuario.email = email;
+    const datosActualizados = {
+        nombre,
+        email
+    };
 
     if (password.length > 0) {
-        Object.assign(usuario, generarCredenciales(password));
+        Object.assign(datosActualizados, generarCredenciales(password));
     }
 
-    return res.status(200).json(obtenerDatosPublicos(usuario));
+    try {
+        const resultado = await coleccionUsuarios.updateOne(
+            { id },
+            { $set: datosActualizados }
+        );
+
+        if (resultado.matchedCount === 0) {
+            return res.status(404).json({
+                error: 'No se ha encontrado el usuario que deseas modificar.'
+            });
+        }
+    } catch (error) {
+        if (error.code === 11000 && error.keyPattern?.email) {
+            return res.status(409).json({
+                error: 'Ya existe otro usuario con ese correo electrónico.'
+            });
+        }
+
+        throw error;
+    }
+
+    return res.status(200).json({
+        ...obtenerDatosPublicos(usuario),
+        nombre,
+        email
+    });
 }
 
 /**
- * Elimina un usuari, els seus intercanvis i les seleccions relacionades.
+ * Elimina un usuari, els seus intercanvis i les seleccions relacionades
+ * de les col·leccions de MongoDB.
  *
  * @param {import('express').Request} req Petició HTTP d'Express.
  * @param {string} req.params.id Identificador de l'usuari que es vol eliminar.
  * @param {import('express').Response} res Resposta HTTP d'Express.
- * @returns {import('express').Response} Resposta HTTP amb el resultat de l'eliminació o l'error corresponent.
+ * @returns {Promise<import('express').Response>} Resposta HTTP amb el resultat de l'eliminació o l'error corresponent.
  * @remarks
  * Retorna HTTP 200 si l'eliminació és correcta,
  * HTTP 400 si l'identificador no és vàlid i HTTP 404 si l'usuari no existeix.
  * També elimina els intercanvis de l'usuari i les seleccions relacionades
  * amb l'usuari o amb els seus intercanvis.
  */
-function eliminarUsuario(req, res) {
+async function eliminarUsuario(req, res) {
     const id = Number(req.params.id);
 
     if (!Number.isInteger(id) || id <= 0) {
@@ -242,40 +288,43 @@ function eliminarUsuario(req, res) {
         });
     }
 
-    const indiceUsuario = usuarios.findIndex(
-        usuario => usuario.id === id
-    );
+    const db = await conectarMongoDB();
 
-    if (indiceUsuario === -1) {
+    const coleccionUsuarios = db.collection('usuarios');
+    const coleccionIntercambios = db.collection('intercambios');
+    const coleccionSelecciones = db.collection('selecciones');
+
+    const usuario = await coleccionUsuarios.findOne({ id });
+
+    if (!usuario) {
         return res.status(404).json({
             error: 'No se ha encontrado el usuario que deseas eliminar.'
         });
     }
 
-    const idsIntercambiosEliminados = new Set(
-        intercambios
-            .filter(intercambio => intercambio.idUsuario === id)
-            .map(intercambio => intercambio.id)
+    const intercambiosUsuario = await coleccionIntercambios
+        .find(
+            { idUsuario: id },
+            { projection: { id: 1 } }
+        )
+        .toArray();
+
+    const idsIntercambiosEliminados = intercambiosUsuario.map(
+        intercambio => intercambio.id
     );
 
-    for (let i = intercambios.length - 1; i >= 0; i--) {
-        if (intercambios[i].idUsuario === id) {
-            intercambios.splice(i, 1);
-        }
-    }
+    await coleccionIntercambios.deleteMany({
+        idUsuario: id
+    });
 
-    for (let i = selecciones.length - 1; i >= 0; i--) {
-        const seleccion = selecciones[i];
+    await coleccionSelecciones.deleteMany({
+        $or: [
+            { idUsuario: id },
+            { idIntercambio: { $in: idsIntercambiosEliminados } }
+        ]
+    });
 
-        if (
-            seleccion.idUsuario === id ||
-            idsIntercambiosEliminados.has(seleccion.idIntercambio)
-        ) {
-            selecciones.splice(i, 1);
-        }
-    }
-
-    usuarios.splice(indiceUsuario, 1);
+    await coleccionUsuarios.deleteOne({ id });
 
     return res.status(200).json({
         mensaje: 'Usuario eliminado correctamente.'

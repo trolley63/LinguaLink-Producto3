@@ -34,10 +34,10 @@ const {
  * @param {Object} [peticion={}] Dades de la petició simulada.
  * @param {Object} [peticion.params={}] Paràmetres de la petició.
  * @param {Object} [peticion.body={}] Dades del cos de la petició.
- * @returns {*} Dades enviades pel controlador mitjançant res.json().
+ * @returns {Promise<*>} Dades enviades pel controlador mitjançant res.json().
  * @throws {GraphQLError} Si el controlador respon amb un codi HTTP igual o superior a 400.
  */
-function ejecutarControlador(controlador, peticion = {}) {
+async function ejecutarControlador(controlador, peticion = {}) {
     let estado = 200;
     let respuesta;
 
@@ -57,7 +57,7 @@ function ejecutarControlador(controlador, peticion = {}) {
         }
     };
 
-    controlador(req, res);
+    await controlador(req, res);
 
     if (estado >= 400) {
         throw new GraphQLError(
@@ -80,8 +80,7 @@ const resolvers = {
     /**
      * Consulta tots els usuaris registrats.
      *
-     * @returns {Array<{id: number, nombre: string, email: string}>}
-     * Llista d'usuaris amb les seves dades públiques.
+     * @returns {Promise<Array<Object>>} Llista d'usuaris amb les seves dades públiques.
      * @throws {GraphQLError} Si el controlador respon amb un codi HTTP d'error.
      */
     obtenerUsuarios: () => {
@@ -93,8 +92,7 @@ const resolvers = {
      *
      * @param {Object} args Arguments de la consulta GraphQL.
      * @param {string} args.email Correu electrònic de l'usuari.
-     * @returns {{id: number, nombre: string, email: string}|null}
-     * Dades públiques de l'usuari o null si no existeix.
+     * @returns {Promise<Object|null>} Dades públiques de l'usuari o null si no existeix.
      * @throws {Error} Si no s'indica un correu electrònic.
      */
     obtenerUsuarioPorEmail: ({ email }) => {
@@ -104,8 +102,7 @@ const resolvers = {
     /**
      * Consulta tots els intercanvis publicats.
      *
-     * @returns {Array<{id: number, titulo: string, descripcion: string, fecha: string, tipo: string, idUsuario: number, email: string}>}
-     * Llista d'intercanvis.
+     * @returns {Promise<Array<Object>>} Llista d'intercanvis.
      * @throws {GraphQLError} Si el controlador respon amb un codi HTTP d'error.
      */
     obtenerIntercambios: () => {
@@ -117,7 +114,7 @@ const resolvers = {
      *
      * @param {Object} args Arguments de la consulta GraphQL.
      * @param {number} args.idUsuario Identificador de l'usuari.
-     * @returns {Array<Object>} Intercanvis publicats per l'usuari.
+     * @returns {Promise<Array<Object>>} Intercanvis publicats per l'usuari.
      * @throws {GraphQLError} Si l'identificador de l'usuari no és vàlid.
      */
     obtenerIntercambiosPorUsuario: ({ idUsuario }) => {
@@ -131,7 +128,7 @@ const resolvers = {
      *
      * @param {Object} args Arguments de la consulta GraphQL.
      * @param {number} args.id Identificador de l'intercanvi.
-     * @returns {Object} Intercanvi trobat.
+     * @returns {Promise<Object>} Intercanvi trobat.
      * @throws {GraphQLError} Si l'identificador no és vàlid o l'intercanvi no existeix.
      */
     obtenerIntercambioPorId: ({ id }) => {
@@ -146,7 +143,7 @@ const resolvers = {
      *
      * @param {Object} args Arguments de la consulta GraphQL.
      * @param {number} args.idUsuario Identificador de l'usuari.
-     * @returns {Array<Object>} Intercanvis seleccionats amb el camp fechaSeleccion.
+     * @returns {Promise<Array<Object>>} Intercanvis seleccionats amb el camp fechaSeleccion.
      * @throws {GraphQLError} Si l'identificador de l'usuari no és vàlid.
      */
     obtenerSeleccionados: ({ idUsuario }) => {
@@ -163,7 +160,7 @@ const resolvers = {
      * @param {string} args.datosUsuario.nombre Nom de l'usuari.
      * @param {string} args.datosUsuario.email Correu electrònic.
      * @param {string} args.datosUsuario.password Contrasenya.
-     * @returns {Object} Dades públiques de l'usuari creat.
+     * @returns {Promise<Object>} Dades públiques de l'usuari creat.
      * @throws {GraphQLError} Si les dades no són vàlides o el correu electrònic ja existeix.
      */
     crearUsuario: ({ datosUsuario }) => {
@@ -182,7 +179,7 @@ const resolvers = {
      * @param {string} args.datosUsuario.nombre Nou nom de l'usuari.
      * @param {string} args.datosUsuario.email Nou correu electrònic.
      * @param {string} [args.datosUsuario.password] Nova contrasenya opcional.
-     * @returns {Object} Dades públiques de l'usuari actualitzat.
+     * @returns {Promise<Object>} Dades públiques de l'usuari actualitzat.
      * @throws {GraphQLError} Si l'usuari no existeix o les dades no són vàlides.
      */
     actualizarUsuario: ({ id, datosUsuario }) => {
@@ -197,11 +194,11 @@ const resolvers = {
      *
      * @param {Object} args Arguments de la mutació GraphQL.
      * @param {number} args.id Identificador de l'usuari que s'eliminarà.
-     * @returns {boolean} true si l'eliminació s'ha realitzat correctament.
+     * @returns {Promise<boolean>} true si l'eliminació s'ha realitzat correctament.
      * @throws {GraphQLError} Si l'usuari no existeix o l'identificador no és vàlid.
      */
-    eliminarUsuario: ({ id }) => {
-        ejecutarControlador(eliminarUsuarioExpress, {
+    eliminarUsuario: async ({ id }) => {
+        await ejecutarControlador(eliminarUsuarioExpress, {
             params: { id }
         });
 
@@ -218,7 +215,7 @@ const resolvers = {
      * @param {string} args.datosIntercambio.fecha Data de publicació.
      * @param {string} args.datosIntercambio.tipo Tipus d'intercanvi.
      * @param {number} args.datosIntercambio.idUsuario Identificador de l'usuari.
-     * @returns {Object} Intercanvi creat.
+     * @returns {Promise<Object>} Intercanvi creat.
      * @throws {GraphQLError} Si les dades no són vàlides o l'usuari no existeix.
      */
     crearIntercambio: ({ datosIntercambio }) => {
@@ -238,7 +235,7 @@ const resolvers = {
      * @param {string} args.datosIntercambio.fecha Nova data.
      * @param {string} args.datosIntercambio.tipo Nou tipus d'intercanvi.
      * @param {number} args.datosIntercambio.idUsuario Identificador de l'usuari.
-     * @returns {Object} Intercanvi actualitzat.
+     * @returns {Promise<Object>} Intercanvi actualitzat.
      * @throws {GraphQLError} Si l'intercanvi no existeix o les dades no són vàlides.
      */
     actualizarIntercambio: ({ id, datosIntercambio }) => {
@@ -253,11 +250,11 @@ const resolvers = {
      *
      * @param {Object} args Arguments de la mutació GraphQL.
      * @param {number} args.id Identificador de l'intercanvi.
-     * @returns {boolean} true si l'eliminació s'ha realitzat correctament.
+     * @returns {Promise<boolean>} true si l'eliminació s'ha realitzat correctament.
      * @throws {GraphQLError} Si l'intercanvi no existeix o l'identificador no és vàlid.
      */
-    eliminarIntercambio: ({ id }) => {
-        ejecutarControlador(eliminarIntercambioExpress, {
+    eliminarIntercambio: async ({ id }) => {
+        await ejecutarControlador(eliminarIntercambioExpress, {
             params: { id }
         });
 
@@ -270,7 +267,7 @@ const resolvers = {
      * @param {Object} args Arguments de la mutació GraphQL.
      * @param {number} args.idUsuario Identificador de l'usuari.
      * @param {number} args.idIntercambio Identificador de l'intercanvi.
-     * @returns {Object} Selecció guardada amb la seva data.
+     * @returns {Promise<Object>} Selecció guardada amb la seva data.
      * @throws {GraphQLError} Si no existeix l'usuari o l'intercanvi, o algun identificador no és vàlid.
      */
     guardarSeleccion: ({ idUsuario, idIntercambio }) => {
@@ -285,7 +282,7 @@ const resolvers = {
      * @param {Object} args Arguments de la mutació GraphQL.
      * @param {number} args.idUsuario Identificador de l'usuari.
      * @param {number} args.idIntercambio Identificador de l'intercanvi.
-     * @returns {boolean} true si la selecció s'elimina correctament.
+     * @returns {Promise<boolean>} true si la selecció s'elimina correctament.
      * @throws {GraphQLError} Si la selecció no existeix o els identificadors no són vàlids.
      */
     eliminarSeleccion: ({ idUsuario, idIntercambio }) => {

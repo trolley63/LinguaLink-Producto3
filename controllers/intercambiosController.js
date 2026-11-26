@@ -1,10 +1,5 @@
-const {
-    usuarios,
-    intercambios,
-    selecciones
-} = require('../data/almacenamiento');
-
-let siguienteIdIntercambio = 1;
+const { conectarMongoDB } = require('../data/conexionMongoDB');
+const { obtenerSiguienteId } = require('../data/models/modelosMongoDB');
 
 const tiposPermitidos = [
     'Ofrezco idioma',
@@ -73,14 +68,21 @@ function validarDatosIntercambio(datos) {
 }
 
 /**
- * Consulta tots els intercanvis.
+ * Consulta tots els intercanvis registrats a MongoDB.
  *
  * @param {import('express').Request} req Petició HTTP d'Express.
  * @param {import('express').Response} res Resposta HTTP d'Express.
- * @returns {void} Envia una resposta HTTP 200 amb la llista d'intercanvis.
+ * @returns {Promise<import('express').Response>} Resposta HTTP amb la llista d'intercanvis.
  */
-function obtenerIntercambios(req, res) {
-    res.status(200).json(intercambios);
+async function obtenerIntercambios(req, res) {
+    const db = await conectarMongoDB();
+
+    const intercambios = await db.collection('intercambios')
+        .find({}, { projection: { _id: 0 } })
+        .sort({ id: 1 })
+        .toArray();
+
+    return res.status(200).json(intercambios);
 }
 
 /**
@@ -89,12 +91,12 @@ function obtenerIntercambios(req, res) {
  * @param {import('express').Request} req Petició HTTP d'Express.
  * @param {string} req.params.idUsuario Identificador de l'usuari.
  * @param {import('express').Response} res Resposta HTTP d'Express.
- * @returns {import('express').Response} Resposta HTTP amb els intercanvis de l'usuari o l'error corresponent.
+ * @returns {Promise<import('express').Response>} Resposta HTTP amb els intercanvis de l'usuari o l'error corresponent.
  * @remarks
  * Retorna HTTP 200 si la consulta és correcta
  * i HTTP 400 si l'identificador de l'usuari no és vàlid.
  */
-function obtenerIntercambiosPorUsuario(req, res) {
+async function obtenerIntercambiosPorUsuario(req, res) {
     const idUsuario = Number(req.params.idUsuario);
 
     if (!Number.isInteger(idUsuario) || idUsuario <= 0) {
@@ -103,9 +105,15 @@ function obtenerIntercambiosPorUsuario(req, res) {
         });
     }
 
-    const resultado = intercambios.filter(
-        intercambio => intercambio.idUsuario === idUsuario
-    );
+    const db = await conectarMongoDB();
+
+    const resultado = await db.collection('intercambios')
+        .find(
+            { idUsuario },
+            { projection: { _id: 0 } }
+        )
+        .sort({ id: 1 })
+        .toArray();
 
     return res.status(200).json(resultado);
 }
@@ -116,12 +124,12 @@ function obtenerIntercambiosPorUsuario(req, res) {
  * @param {import('express').Request} req Petició HTTP d'Express.
  * @param {string} req.params.id Identificador de l'intercanvi.
  * @param {import('express').Response} res Resposta HTTP d'Express.
- * @returns {import('express').Response} Resposta HTTP amb l'intercanvi trobat o l'error corresponent.
+ * @returns {Promise<import('express').Response>} Resposta HTTP amb l'intercanvi trobat o l'error corresponent.
  * @remarks
  * Retorna HTTP 200 si l'intercanvi existeix,
  * HTTP 400 si l'identificador no és vàlid i HTTP 404 si no es troba.
  */
-function obtenerIntercambioPorId(req, res) {
+async function obtenerIntercambioPorId(req, res) {
     const id = Number(req.params.id);
 
     if (!Number.isInteger(id) || id <= 0) {
@@ -130,9 +138,13 @@ function obtenerIntercambioPorId(req, res) {
         });
     }
 
-    const intercambio = intercambios.find(
-        item => item.id === id
-    );
+    const db = await conectarMongoDB();
+
+    const intercambio = await db.collection('intercambios')
+        .findOne(
+            { id },
+            { projection: { _id: 0 } }
+        );
 
     if (!intercambio) {
         return res.status(404).json({
@@ -144,7 +156,7 @@ function obtenerIntercambioPorId(req, res) {
 }
 
 /**
- * Crea un intercanvi nou.
+ * Crea un intercanvi nou a MongoDB.
  *
  * @param {import('express').Request} req Petició HTTP d'Express.
  * @param {string} req.body.titulo Títol de l'intercanvi.
@@ -153,13 +165,13 @@ function obtenerIntercambioPorId(req, res) {
  * @param {string} req.body.tipo Tipus d'intercanvi.
  * @param {number|string} req.body.idUsuario Identificador de l'usuari propietari.
  * @param {import('express').Response} res Resposta HTTP d'Express.
- * @returns {import('express').Response} Resposta HTTP amb l'intercanvi creat o l'error corresponent.
+ * @returns {Promise<import('express').Response>} Resposta HTTP amb l'intercanvi creat o l'error corresponent.
  * @remarks
  * Retorna HTTP 201 si l'intercanvi s'ha creat correctament,
  * HTTP 400 si les dades no són vàlides i HTTP 404 si l'usuari associat no existeix.
  * El correu electrònic s'obté a partir de l'usuari associat.
  */
-function crearIntercambio(req, res) {
+async function crearIntercambio(req, res) {
     const validacion = validarDatosIntercambio(req.body);
 
     if (validacion.error) {
@@ -168,8 +180,11 @@ function crearIntercambio(req, res) {
         });
     }
 
-    const usuario = usuarios.find(
-        item => item.id === validacion.datos.idUsuario
+    const db = await conectarMongoDB();
+
+    const usuario = await db.collection('usuarios').findOne(
+        { id: validacion.datos.idUsuario },
+        { projection: { _id: 0, email: 1 } }
     );
 
     if (!usuario) {
@@ -179,18 +194,18 @@ function crearIntercambio(req, res) {
     }
 
     const intercambio = {
-        id: siguienteIdIntercambio++,
+        id: await obtenerSiguienteId(db, 'intercambios'),
         ...validacion.datos,
         email: usuario.email
     };
 
-    intercambios.push(intercambio);
+    await db.collection('intercambios').insertOne(intercambio);
 
     return res.status(201).json(intercambio);
 }
 
 /**
- * Actualitza les dades d'un intercanvi.
+ * Actualitza les dades d'un intercanvi a MongoDB.
  *
  * @param {import('express').Request} req Petició HTTP d'Express.
  * @param {string} req.params.id Identificador de l'intercanvi que es vol actualitzar.
@@ -200,14 +215,14 @@ function crearIntercambio(req, res) {
  * @param {string} req.body.tipo Nou tipus d'intercanvi.
  * @param {number|string} req.body.idUsuario Identificador de l'usuari propietari.
  * @param {import('express').Response} res Resposta HTTP d'Express.
- * @returns {import('express').Response} Resposta HTTP amb l'intercanvi actualitzat o l'error corresponent.
+ * @returns {Promise<import('express').Response>} Resposta HTTP amb l'intercanvi actualitzat o l'error corresponent.
  * @remarks
  * Retorna HTTP 200 si l'actualització és correcta,
  * HTTP 400 si l'identificador o les dades no són vàlids,
  * i HTTP 404 si no existeix l'intercanvi o l'usuari associat.
  * El correu electrònic s'obté a partir de l'usuari associat.
  */
-function actualizarIntercambio(req, res) {
+async function actualizarIntercambio(req, res) {
     const id = Number(req.params.id);
 
     if (!Number.isInteger(id) || id <= 0) {
@@ -216,9 +231,11 @@ function actualizarIntercambio(req, res) {
         });
     }
 
-    const intercambio = intercambios.find(
-        item => item.id === id
-    );
+    const db = await conectarMongoDB();
+
+    const coleccionIntercambios = db.collection('intercambios');
+
+    const intercambio = await coleccionIntercambios.findOne({ id });
 
     if (!intercambio) {
         return res.status(404).json({
@@ -234,8 +251,9 @@ function actualizarIntercambio(req, res) {
         });
     }
 
-    const usuario = usuarios.find(
-        item => item.id === validacion.datos.idUsuario
+    const usuario = await db.collection('usuarios').findOne(
+        { id: validacion.datos.idUsuario },
+        { projection: { _id: 0, email: 1 } }
     );
 
     if (!usuario) {
@@ -244,27 +262,41 @@ function actualizarIntercambio(req, res) {
         });
     }
 
-    Object.assign(intercambio, {
+    const datosActualizados = {
         ...validacion.datos,
         email: usuario.email
-    });
+    };
 
-    return res.status(200).json(intercambio);
+    const resultado = await coleccionIntercambios.updateOne(
+        { id },
+        { $set: datosActualizados }
+    );
+
+    if (resultado.matchedCount === 0) {
+        return res.status(404).json({
+            error: 'No se ha encontrado el intercambio.'
+        });
+    }
+
+    return res.status(200).json({
+        id,
+        ...datosActualizados
+    });
 }
 
 /**
- * Elimina un intercanvi i les seleccions relacionades.
+ * Elimina un intercanvi i les seleccions relacionades de MongoDB.
  *
  * @param {import('express').Request} req Petició HTTP d'Express.
  * @param {string} req.params.id Identificador de l'intercanvi que es vol eliminar.
  * @param {import('express').Response} res Resposta HTTP d'Express.
- * @returns {import('express').Response} Resposta HTTP amb el resultat de l'eliminació o l'error corresponent.
+ * @returns {Promise<import('express').Response>} Resposta HTTP amb el resultat de l'eliminació o l'error corresponent.
  * @remarks
  * Retorna HTTP 200 si l'eliminació és correcta,
  * HTTP 400 si l'identificador no és vàlid i HTTP 404 si l'intercanvi no existeix.
  * També elimina les seleccions associades a l'intercanvi.
  */
-function eliminarIntercambio(req, res) {
+async function eliminarIntercambio(req, res) {
     const id = Number(req.params.id);
 
     if (!Number.isInteger(id) || id <= 0) {
@@ -273,23 +305,19 @@ function eliminarIntercambio(req, res) {
         });
     }
 
-    const indice = intercambios.findIndex(
-        item => item.id === id
-    );
+    const db = await conectarMongoDB();
 
-    if (indice === -1) {
+    const resultado = await db.collection('intercambios').deleteOne({ id });
+
+    if (resultado.deletedCount === 0) {
         return res.status(404).json({
             error: 'No se ha encontrado el intercambio.'
         });
     }
 
-    intercambios.splice(indice, 1);
-
-    for (let i = selecciones.length - 1; i >= 0; i--) {
-        if (selecciones[i].idIntercambio === id) {
-            selecciones.splice(i, 1);
-        }
-    }
+    await db.collection('selecciones').deleteMany({
+        idIntercambio: id
+    });
 
     return res.status(200).json({
         mensaje: 'Intercambio eliminado correctamente.'

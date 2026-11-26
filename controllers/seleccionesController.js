@@ -1,26 +1,21 @@
-const {
-    usuarios,
-    intercambios,
-    selecciones
-} = require('../data/almacenamiento');
+const { conectarMongoDB } = require('../data/conexionMongoDB');
 
 /**
- * Guarda o actualitza la selecció d'un usuari.
+ * Guarda o actualitza la selecció d'un usuari a MongoDB.
  * Comprova que existeixin l'usuari i l'intercanvi.
- * Si la selecció ja existeix, n'actualitza la data.
+ * Si la selecció ja existeix, n'actualitza la data sense duplicar-la.
  *
  * @param {import('express').Request} req Petició HTTP d'Express.
  * @param {string} req.params.idUsuario Identificador de l'usuari.
  * @param {string} req.params.idIntercambio Identificador de l'intercanvi.
  * @param {import('express').Response} res Resposta HTTP d'Express.
- * @returns {import('express').Response} Resposta HTTP amb les dades de la selecció o l'error corresponent.
+ * @returns {Promise<import('express').Response>} Resposta HTTP amb les dades de la selecció o l'error corresponent.
  * @remarks
  * Retorna HTTP 200 si la selecció s'ha guardat o actualitzat,
  * HTTP 400 si algun identificador no és vàlid i HTTP 404
  * si no existeix l'usuari o l'intercanvi indicat.
- * La selecció conté idUsuario, idIntercambio i fechaSeleccion.
  */
-function guardarSeleccion(req, res) {
+async function guardarSeleccion(req, res) {
     const idUsuario = Number(req.params.idUsuario);
     const idIntercambio = Number(req.params.idIntercambio);
 
@@ -36,7 +31,11 @@ function guardarSeleccion(req, res) {
         });
     }
 
-    const usuario = usuarios.find(item => item.id === idUsuario);
+    const db = await conectarMongoDB();
+
+    const usuario = await db.collection('usuarios').findOne({
+        id: idUsuario
+    });
 
     if (!usuario) {
         return res.status(404).json({
@@ -44,9 +43,9 @@ function guardarSeleccion(req, res) {
         });
     }
 
-    const intercambio = intercambios.find(
-        item => item.id === idIntercambio
-    );
+    const intercambio = await db.collection('intercambios').findOne({
+        id: idIntercambio
+    });
 
     if (!intercambio) {
         return res.status(404).json({
@@ -60,17 +59,20 @@ function guardarSeleccion(req, res) {
         fechaSeleccion: new Date().toISOString()
     };
 
-    const indice = selecciones.findIndex(
-        item =>
-            item.idUsuario === idUsuario &&
-            item.idIntercambio === idIntercambio
+    await db.collection('selecciones').updateOne(
+        {
+            idUsuario,
+            idIntercambio
+        },
+        {
+            $set: {
+                fechaSeleccion: seleccion.fechaSeleccion
+            }
+        },
+        {
+            upsert: true
+        }
     );
-
-    if (indice === -1) {
-        selecciones.push(seleccion);
-    } else {
-        selecciones[indice] = seleccion;
-    }
 
     return res.status(200).json(seleccion);
 }
@@ -78,16 +80,19 @@ function guardarSeleccion(req, res) {
 /**
  * Consulta les seleccions d'un usuari amb les dades dels intercanvis.
  *
+ * Utilitza una agregació amb $lookup per relacionar les col·leccions
+ * de seleccions i intercanvis.
+ *
  * @param {import('express').Request} req Petició HTTP d'Express.
  * @param {string} req.params.idUsuario Identificador de l'usuari.
  * @param {import('express').Response} res Resposta HTTP d'Express.
- * @returns {import('express').Response} Resposta HTTP amb la llista d'intercanvis seleccionats o l'error corresponent.
+ * @returns {Promise<import('express').Response>} Resposta HTTP amb la llista d'intercanvis seleccionats.
  * @remarks
  * Retorna HTTP 200 amb una llista d'intercanvis que incorpora
  * la data de selecció (fechaSeleccion), o HTTP 400 si
  * l'identificador de l'usuari no és vàlid.
  */
-function obtenerSeleccionados(req, res) {
+async function obtenerSeleccionados(req, res) {
     const idUsuario = Number(req.params.idUsuario);
 
     if (!Number.isInteger(idUsuario) || idUsuario <= 0) {
@@ -96,44 +101,66 @@ function obtenerSeleccionados(req, res) {
         });
     }
 
-    const seleccionesUsuario = selecciones.filter(
-        item => item.idUsuario === idUsuario
-    );
+    const db = await conectarMongoDB();
 
-    const resultado = seleccionesUsuario
-        .map(seleccion => {
-            const intercambio = intercambios.find(
-                item => item.id === seleccion.idIntercambio
-            );
-
-            if (!intercambio) {
-                return null;
+    const resultado = await db.collection('selecciones').aggregate([
+        {
+            $match: {
+                idUsuario
             }
-
-            return {
-                ...intercambio,
-                fechaSeleccion: seleccion.fechaSeleccion
-            };
-        })
-        .filter(Boolean);
+        },
+        {
+            $sort: {
+                _id: 1
+            }
+        },
+        {
+            $lookup: {
+                from: 'intercambios',
+                localField: 'idIntercambio',
+                foreignField: 'id',
+                as: 'intercambio'
+            }
+        },
+        {
+            $unwind: '$intercambio'
+        },
+        {
+            $replaceRoot: {
+                newRoot: {
+                    $mergeObjects: [
+                        '$intercambio',
+                        {
+                            fechaSeleccion: '$fechaSeleccion'
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            $project: {
+                _id: 0
+            }
+        }
+    ]).toArray();
 
     return res.status(200).json(resultado);
 }
 
 /**
- * Elimina una selecció concreta d'un usuari.
+ * Elimina una selecció concreta d'un usuari a MongoDB.
  *
  * @param {import('express').Request} req Petició HTTP d'Express.
  * @param {string} req.params.idUsuario Identificador de l'usuari.
  * @param {string} req.params.idIntercambio Identificador de l'intercanvi.
  * @param {import('express').Response} res Resposta HTTP d'Express.
- * @returns {import('express').Response} Resposta HTTP amb el resultat de l'eliminació o l'error corresponent.
+ * @returns {Promise<import('express').Response>} Resposta HTTP amb el resultat de l'eliminació o l'error corresponent.
  * @remarks
  * Retorna HTTP 200 amb el valor true si la selecció s'ha eliminat,
  * HTTP 400 si algun identificador no és vàlid i HTTP 404
  * si la selecció indicada no existeix.
  */
-function eliminarSeleccion(req, res) {
+async function eliminarSeleccion(req, res) {
     const idUsuario = Number(req.params.idUsuario);
     const idIntercambio = Number(req.params.idIntercambio);
 
@@ -149,19 +176,18 @@ function eliminarSeleccion(req, res) {
         });
     }
 
-    const indice = selecciones.findIndex(
-        item =>
-            item.idUsuario === idUsuario &&
-            item.idIntercambio === idIntercambio
-    );
+    const db = await conectarMongoDB();
 
-    if (indice === -1) {
+    const resultado = await db.collection('selecciones').deleteOne({
+        idUsuario,
+        idIntercambio
+    });
+
+    if (resultado.deletedCount === 0) {
         return res.status(404).json({
             error: 'Este intercambio no está en la selección del usuario.'
         });
     }
-
-    selecciones.splice(indice, 1);
 
     return res.status(200).json(true);
 }
