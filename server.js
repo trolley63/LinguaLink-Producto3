@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const express = require('express');
 
 const { createHandler } = require('graphql-http/lib/use/express');
@@ -8,26 +10,34 @@ const resolvers = require('./graphql/resolvers');
 const { conectarMongoDB } = require('./data/conexionMongoDB');
 const { inicializarModelosMongoDB } = require('./data/models/modelosMongoDB');
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+const {
+    autenticarToken
+} = require('./middleware/autenticacion');
 
+const autenticacionRoutes = require('./routes/autenticacion');
 const usuariosRoutes = require('./routes/usuarios');
 const intercambiosRoutes = require('./routes/intercambios');
 const seleccionesRoutes = require('./routes/selecciones');
 
-// Endpoint de GraphQL
-app.all('/graphql', createHandler({
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Ruta pública per iniciar sessió com a administrador.
+app.use('/auth', express.json(), autenticacionRoutes);
+
+// Endpoint de GraphQL protegit mitjançant JWT.
+app.all('/graphql', autenticarToken, createHandler({
     schema,
     rootValue: resolvers
 }));
 
-// Middleware per interpretar les peticions amb cos JSON
+// Middleware per interpretar les peticions amb cos JSON de les rutes REST.
 app.use(express.json());
 
-// Rutes de l'aplicació
-app.use('/usuarios', usuariosRoutes);
-app.use('/intercambios', intercambiosRoutes);
-app.use('/selecciones', seleccionesRoutes);
+// Rutes protegides de l'aplicació.
+app.use('/usuarios', autenticarToken, usuariosRoutes);
+app.use('/intercambios', autenticarToken, intercambiosRoutes);
+app.use('/selecciones', autenticarToken, seleccionesRoutes);
 
 /**
  * Inicia el servidor després de connectar amb MongoDB
